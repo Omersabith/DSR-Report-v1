@@ -32,13 +32,13 @@ def setup_pwa():
                 "start_url": ".",
                 "icons": [
                     {
-                        "src": "https://i.imgur.com/tQYT0R8.png",
+                        "src": "https://imgur.com/a/dsr-by-sabithcon-tZgLJS4",
                         "sizes": "192x192",
                         "type": "image/png",
                         "purpose": "any maskable"
                     },
                     {
-                        "src": "https://i.imgur.com/tQYT0R8.png",
+                        "src": "https://imgur.com/a/dsr-by-sabithcon-tZgLJS4",
                         "sizes": "512x512",
                         "type": "image/png",
                         "purpose": "any maskable"
@@ -77,7 +77,7 @@ def setup_pwa():
         if (!parentDoc.querySelector('link[rel="apple-touch-icon"]')) {
             const appleIcon = parentDoc.createElement('link');
             appleIcon.rel = 'apple-touch-icon';
-            appleIcon.href = 'https://i.imgur.com/tQYT0R8.png';
+            appleIcon.href = 'https://imgur.com/a/dsr-by-sabithcon-tZgLJS4';
             parentDoc.head.appendChild(appleIcon);
         }
     </script>
@@ -275,3 +275,4 @@ fast_sku = (
     .head(10)
 )
 st.dataframe(fast_sku, use_container_width=True, hide_index=True)
+
