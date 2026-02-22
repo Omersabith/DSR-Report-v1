@@ -29,13 +29,13 @@ def setup_pwa():
             "start_url": "/",
             "icons": [
                 {
-                    "src": "https://drive.google.com/uc?export=view&id=1bwWtIZDx-Dx33_bGdWWEbLHrm62-h3M1",
+                    "src": "https://imgur.com/a/tQYT0R8",
                     "sizes": "192x192",
                     "type": "image/png",
                     "purpose": "any maskable"
                 },
                 {
-                    "src": "https://drive.google.com/uc?export=view&id=1bwWtIZDx-Dx33_bGdWWEbLHrm62-h3M1",
+                    "src": "https://imgur.com/a/tQYT0R8",
                     "sizes": "512x512",
                     "type": "image/png",
                     "purpose": "any maskable"
@@ -305,4 +305,5 @@ fast_sku = (
     .head(10)
 )
 st.dataframe(fast_sku, use_container_width=True, hide_index=True)
+
 
