@@ -1,9 +1,98 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
+import streamlit.components.v1 as components
 
 # Set page configuration
-st.set_page_config(layout="wide", page_title="Sales Dashboard")
+st.set_page_config(layout="wide", page_title="Sales Dashboard", page_icon="📊")
+
+# =========================
+# PROGRESSIVE WEB APP (PWA) INJECTION
+# =========================
+def setup_pwa():
+    """
+    Injects a Web App Manifest, iOS meta tags, and a minimal Service Worker into the Streamlit app.
+    This fulfills browser requirements to prompt the user to "Add to Home Screen" or "Install App".
+    """
+    pwa_html = """
+    <script>
+        // 1. Define the Web App Manifest
+        const manifest = {
+            "name": "Sales Dashboard Application",
+            "short_name": "SalesDash",
+            "description": "Comprehensive Sales Analytics and Tracking",
+            "theme_color": "#F0F2F6",
+            "background_color": "#FFFFFF",
+            "display": "standalone",
+            "orientation": "portrait-primary",
+            "scope": "/",
+            "start_url": "/",
+            "icons": [
+                {
+                    "src": "https://raw.githubusercontent.com/streamlit/streamlit/develop/docs/public/favicon.png",
+                    "sizes": "192x192",
+                    "type": "image/png",
+                    "purpose": "any maskable"
+                },
+                {
+                    "src": "https://raw.githubusercontent.com/streamlit/streamlit/develop/docs/public/favicon.png",
+                    "sizes": "512x512",
+                    "type": "image/png",
+                    "purpose": "any maskable"
+                }
+            ]
+        };
+        
+        // Convert the manifest to a Blob and create a URL
+        const stringManifest = JSON.stringify(manifest);
+        const blob = new Blob([stringManifest], {type: 'application/json'});
+        const manifestURL = URL.createObjectURL(blob);
+        
+        // Inject the manifest link into the <head> if it doesn't exist
+        if (!document.querySelector('link[rel="manifest"]')) {
+            const manifestLink = document.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = manifestURL;
+            document.head.appendChild(manifestLink);
+        }
+
+        // 2. Inject Apple/iOS specific meta tags for home screen compatibility
+        const metaTags = [
+            { name: 'apple-mobile-web-app-capable', content: 'yes' },
+            { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
+            { name: 'apple-mobile-web-app-title', content: 'SalesDash' }
+        ];
+        
+        metaTags.forEach(tag => {
+            if (!document.querySelector(`meta[name="${tag.name}"]`)) {
+                const meta = document.createElement('meta');
+                meta.name = tag.name;
+                meta.content = tag.content;
+                document.head.appendChild(meta);
+            }
+        });
+
+        // 3. Dummy Service Worker Registration
+        // Chrome requires a registered Service Worker with a fetch event handler to trigger the install prompt.
+        if ('serviceWorker' in navigator) {
+            // A simple pass-through service worker
+            const swCode = "self.addEventListener('fetch', function(event) { event.respondWith(fetch(event.request)); });";
+            const swBlob = new Blob([swCode], {type: 'application/javascript'});
+            const swUrl = URL.createObjectURL(swBlob);
+            
+            navigator.serviceWorker.register(swUrl).then(registration => {
+                console.log('PWA Service Worker registered for installability.');
+            }).catch(err => {
+                console.log('Service Worker registration failed: ', err);
+            });
+        }
+    </script>
+    """
+    # Render the component invisibly
+    components.html(pwa_html, height=0, width=0)
+
+# Initialize the PWA functionality immediately
+setup_pwa()
 
 # =========================
 # LOAD DATA
@@ -133,6 +222,19 @@ sales_value = sales_df["Value"].sum()
 return_value = return_df["Value"].sum()
 sales_volume = sales_df["Qty"].sum()
 
+# Styling metrics for better visual separation
+st.markdown("""
+<style>
+div[data-testid="metric-container"] {
+    background-color: rgba(28, 131, 225, 0.1);
+    border: 1px solid rgba(28, 131, 225, 0.1);
+    padding: 5% 10% 5% 10%;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+</style>
+""", unsafe_allow_html=True)
+
 k1, k2, k3, k4 = st.columns(4)
 k1.metric("Net Revenue", f"OMR {net_revenue:,.2f}")
 k2.metric("Sale Value", f"OMR {sales_value:,.2f}")
@@ -166,6 +268,7 @@ if not filtered_df.empty:
 
     # Formatting X-Axis to show Month names
     fig_trend.update_xaxes(dtick="M1", tickformat="%b %Y")
+    fig_trend.update_layout(hovermode="x unified", plot_bgcolor='rgba(0,0,0,0)')
 
     st.plotly_chart(fig_trend, use_container_width=True)
 else:
@@ -180,10 +283,12 @@ chart_data = filtered_df.copy()
 chart_data["AbsValue"] = chart_data["Value"].abs()
 
 if not chart_data.empty:
-    fig_cat = px.pie(chart_data, values="AbsValue", names="Category", hole=0.5, title="Category Share")
+    fig_cat = px.pie(chart_data, values="AbsValue", names="Category", hole=0.5, title="Revenue Share by Category")
+    fig_cat.update_traces(textposition='inside', textinfo='percent+label')
     c1.plotly_chart(fig_cat, use_container_width=True)
 
-    fig_ch = px.pie(chart_data, values="AbsValue", names="Channel", hole=0.5, title="Channel Share")
+    fig_ch = px.pie(chart_data, values="AbsValue", names="Channel", hole=0.5, title="Revenue Share by Channel")
+    fig_ch.update_traces(textposition='inside', textinfo='percent+label')
     c2.plotly_chart(fig_ch, use_container_width=True)
 
 # =========================
@@ -199,4 +304,4 @@ fast_sku = (
     .sort_values("Qty", ascending=False)
     .head(10)
 )
-st.dataframe(fast_sku, use_container_width=True)
+st.dataframe(fast_sku, use_container_width=True, hide_index=True)
