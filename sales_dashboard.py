@@ -23,7 +23,7 @@ def load_data():
     # --- Standardize column names ---
     df.columns = df.columns.str.strip()
     
-    # Map headers exactly as they appear in the provided image
+    # Map headers to standard names (ignores if missing)
     rename_map = {
         "CHANNEL": "Channel",
         "Customer Name": "CustomerName",
@@ -34,14 +34,16 @@ def load_data():
     }
     df = df.rename(columns=rename_map)
 
+    # --- Safety Checks for Missing Columns ---
+    expected_cols = ["Channel", "CustomerName", "Category", "SubCategory", "Salesman", "PartNo", "Type", "Value", "Qty", "Date"]
+    for col in expected_cols:
+        if col not in df.columns:
+            df[col] = "Unknown" if col not in ["Value", "Qty"] else 0
+
     # --- Data Cleaning ---
     df["Type"] = df["Type"].astype(str).str.upper().str.strip()
     df["Value"] = pd.to_numeric(df["Value"], errors="coerce").fillna(0)
-    
-    if "Qty" in df.columns:
-        df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
-    else:
-        df["Qty"] = 0
+    df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
 
     # 🔴 Force returns to be negative
     df.loc[df["Type"] == "RETURN", "Value"] = -df.loc[df["Type"] == "RETURN", "Value"].abs()
@@ -51,7 +53,6 @@ def load_data():
     df = df.dropna(subset=["Date"])
 
     # --- Create Month-Year column for the trend graph ---
-    # We use periods or floor dates so the graph stays in chronological order
     df["Month"] = df["Date"].dt.to_period("M").dt.to_timestamp()
 
     return df
@@ -59,49 +60,67 @@ def load_data():
 df = load_data()
 
 if df.empty:
+    st.warning("No valid data to display. Please check your data file format and Date column.")
     st.stop()
 
 # =========================
-# GLOBAL FILTERS (Expanded)
+# GLOBAL FILTERS (Cascading)
 # =========================
 st.title("📊 Sales Dashboard")
 
-# Create two rows of filters for better UI
-f_row1 = st.columns(4)
-f_row2 = st.columns(5) # Expanded to 5 to fit Customer filter
+# We apply filters sequentially so the options in the next dropdown are limited by previous choices
+filtered_df = df.copy()
 
-# Row 1
+f_row1 = st.columns(4)
+f_row2 = st.columns(5) 
+
+# --- Row 1 Filters (Date, Type, Channel) ---
 start_date = f_row1[0].date_input("Start Date", df["Date"].min())
 end_date = f_row1[1].date_input("End Date", df["Date"].max())
 type_filter = f_row1[2].selectbox("Type", ["BOTH", "SALE", "RETURN"])
-channel_filter = f_row1[3].multiselect("Channel", sorted(df["Channel"].dropna().unique()))
 
-# Row 2 (Added Customer Name, Category, SubCat, Salesman, and PartNo filters)
-customer_filter = f_row2[0].multiselect("Customer", sorted(df["CustomerName"].dropna().unique()))
-cat_filter = f_row2[1].multiselect("Category", sorted(df["Category"].dropna().unique()))
-subcat_filter = f_row2[2].multiselect("Sub Category", sorted(df["SubCategory"].dropna().unique()))
-salesman_filter = f_row2[3].multiselect("Sales Executive", sorted(df["Salesman"].dropna().unique()))
-part_filter = f_row2[4].multiselect("Part Number", sorted(df["PartNo"].dropna().unique()))
-
-# --- Apply All Filters ---
-mask = (df["Date"] >= pd.to_datetime(start_date)) & (df["Date"] <= pd.to_datetime(end_date))
-
+# Apply Date and Type filters first
+filtered_df = filtered_df[(filtered_df["Date"] >= pd.to_datetime(start_date)) & (filtered_df["Date"] <= pd.to_datetime(end_date))]
 if type_filter != "BOTH":
-    mask &= (df["Type"] == type_filter)
-if channel_filter:
-    mask &= (df["Channel"].isin(channel_filter))
-if customer_filter:
-    mask &= (df["CustomerName"].isin(customer_filter))
-if cat_filter:
-    mask &= (df["Category"].isin(cat_filter))
-if subcat_filter:
-    mask &= (df["SubCategory"].isin(subcat_filter))
-if salesman_filter:
-    mask &= (df["Salesman"].isin(salesman_filter))
-if part_filter:
-    mask &= (df["PartNo"].isin(part_filter))
+    filtered_df = filtered_df[filtered_df["Type"] == type_filter]
 
-filtered_df = df[mask]
+# Channel
+channel_options = sorted(filtered_df["Channel"].dropna().astype(str).unique())
+channel_filter = f_row1[3].multiselect("Channel", channel_options)
+if channel_filter:
+    filtered_df = filtered_df[filtered_df["Channel"].isin(channel_filter)]
+
+# --- Row 2 Filters (Dependent on Row 1) ---
+# Customer 
+customer_options = sorted(filtered_df["CustomerName"].dropna().astype(str).unique())
+customer_filter = f_row2[0].multiselect("Customer", customer_options)
+if customer_filter:
+    filtered_df = filtered_df[filtered_df["CustomerName"].isin(customer_filter)]
+
+# Category
+cat_options = sorted(filtered_df["Category"].dropna().astype(str).unique())
+cat_filter = f_row2[1].multiselect("Category", cat_options)
+if cat_filter:
+    filtered_df = filtered_df[filtered_df["Category"].isin(cat_filter)]
+
+# Sub Category
+subcat_options = sorted(filtered_df["SubCategory"].dropna().astype(str).unique())
+subcat_filter = f_row2[2].multiselect("Sub Category", subcat_options)
+if subcat_filter:
+    filtered_df = filtered_df[filtered_df["SubCategory"].isin(subcat_filter)]
+
+# Salesman
+salesman_options = sorted(filtered_df["Salesman"].dropna().astype(str).unique())
+salesman_filter = f_row2[3].multiselect("Sales Executive", salesman_options)
+if salesman_filter:
+    filtered_df = filtered_df[filtered_df["Salesman"].isin(salesman_filter)]
+
+# Part Number
+part_options = sorted(filtered_df["PartNo"].dropna().astype(str).unique())
+part_filter = f_row2[4].multiselect("Part Number", part_options)
+if part_filter:
+    filtered_df = filtered_df[filtered_df["PartNo"].isin(part_filter)]
+
 
 # =========================
 # KPI CALCULATIONS
