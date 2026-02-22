@@ -2,131 +2,158 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import streamlit.components.v1 as components
+import base64
+import os
+
+# =========================
+# GET ICON LOCALLY (100% Reliable)
+# =========================
+@st.cache_data
+def get_icon_base64():
+    """Reads icon.png from the local folder to guarantee it cannot be blocked by the internet."""
+    # 1. Try to read the local icon.png file
+    if os.path.exists("icon.png"):
+        try:
+            with open("icon.png", "rb") as f:
+                b64 = base64.b64encode(f.read()).decode('utf-8')
+                return f"data:image/png;base64,{b64}"
+        except Exception as e:
+            st.error(f"Error reading icon.png: {e}")
+            
+    # 2. Absolute fallback if icon.png is missing
+    return "https://i.imgur.com/dOpt87p.png"
+
+ICON_DATA = get_icon_base64()
 
 # Set page configuration
 st.set_page_config(layout="wide", page_title="Sales Dashboard", page_icon="📊")
 
+# Show a warning if the local file is missing to help you troubleshoot
+if not os.path.exists("icon.png"):
+    st.warning("⚠️ 'icon.png' was not found in the app folder. For the custom icon to work reliably, please save your image as 'icon.png' in the same folder as this script.")
+
 # =========================
 # PROGRESSIVE WEB APP (PWA) INJECTION
 # =========================
-def setup_pwa():
+def setup_pwa(icon_data):
     """
-    Injects a Web App Manifest, Service Worker, and a custom Floating Install 
-    Button into the parent window to guarantee users can install the app.
+    Injects a Web App Manifest and forces the custom icon using Base64 data.
     """
-    pwa_html = """
+    pwa_html = f"""
     <script>
-        try {
+        try {{
             const parentDoc = window.parent.document;
             const parentWin = window.parent;
-            // Get the absolute URL of the app (CRITICAL fix for Blob manifests)
-            const parentLoc = parentWin.location.href.split('?')[0]; 
+            const parentLoc = parentWin.location.origin + parentWin.location.pathname; 
 
-            // 1. Inject the Web App Manifest
-            if (!parentDoc.querySelector('link[rel="manifest"]')) {
-                const manifest = {
-                    "name": "Sales Dashboard Application",
-                    "short_name": "SalesDash",
-                    "description": "Comprehensive Sales Analytics and Tracking",
-                    "theme_color": "#F0F2F6",
-                    "background_color": "#FFFFFF",
-                    "display": "standalone",
-                    "orientation": "portrait-primary",
-                    "start_url": parentLoc, // Fixed absolute URL
-                    "icons": [
-                        {
-                            "src": "https://i.imgur.com/dOpt87p.png",
-                            "sizes": "192x192",
-                            "type": "image/png",
-                            "purpose": "any maskable"
-                        },
-                        {
-                            "src": "https://i.imgur.com/dOpt87p.png",
-                            "sizes": "512x512",
-                            "type": "image/png",
-                            "purpose": "any maskable"
-                        }
-                    ]
-                };
-                
-                const stringManifest = JSON.stringify(manifest);
-                const blob = new Blob([stringManifest], {type: 'application/json'});
-                const manifestURL = URL.createObjectURL(blob);
-                
-                const manifestLink = parentDoc.createElement('link');
-                manifestLink.rel = 'manifest';
-                manifestLink.href = manifestURL;
-                parentDoc.head.appendChild(manifestLink);
-            }
+            // 1. Force Remove old Streamlit icons to prevent conflicts
+            const oldIcons = parentDoc.querySelectorAll('link[rel="shortcut icon"], link[rel="icon"], link[rel="apple-touch-icon"]');
+            oldIcons.forEach(icon => icon.remove());
 
-            // 2. Inject Apple/iOS specific meta tags
+            // 2. Inject Apple Touch Icon & Standard Icon
+            const appleIcon = parentDoc.createElement('link');
+            appleIcon.rel = 'apple-touch-icon';
+            appleIcon.href = '{icon_data}';
+            parentDoc.head.appendChild(appleIcon);
+            
+            const standardIcon = parentDoc.createElement('link');
+            standardIcon.rel = 'icon';
+            standardIcon.href = '{icon_data}';
+            parentDoc.head.appendChild(standardIcon);
+
+            // 3. Inject the Web App Manifest
+            const oldManifest = parentDoc.querySelector('link[rel="manifest"]');
+            if (oldManifest) oldManifest.remove();
+
+            const manifest = {{
+                "name": "Sales Dashboard Application",
+                "short_name": "SalesDash",
+                "description": "Comprehensive Sales Analytics and Tracking",
+                "theme_color": "#F0F2F6",
+                "background_color": "#FFFFFF",
+                "display": "standalone",
+                "orientation": "portrait-primary",
+                "start_url": parentLoc, 
+                "icons": [
+                    {{
+                        "src": "{icon_data}",
+                        "sizes": "192x192",
+                        "type": "image/png",
+                        "purpose": "any maskable"
+                    }},
+                    {{
+                        "src": "{icon_data}",
+                        "sizes": "512x512",
+                        "type": "image/png",
+                        "purpose": "any maskable"
+                    }}
+                ]
+            }};
+            
+            const stringManifest = JSON.stringify(manifest);
+            const blob = new Blob([stringManifest], {{type: 'application/json'}});
+            const manifestURL = URL.createObjectURL(blob);
+            
+            const manifestLink = parentDoc.createElement('link');
+            manifestLink.rel = 'manifest';
+            manifestLink.href = manifestURL;
+            parentDoc.head.appendChild(manifestLink);
+
+            // 4. Inject Apple/iOS specific meta tags
             const metaTags = [
-                { name: 'apple-mobile-web-app-capable', content: 'yes' },
-                { name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' },
-                { name: 'apple-mobile-web-app-title', content: 'SalesDash' }
+                {{ name: 'apple-mobile-web-app-capable', content: 'yes' }},
+                {{ name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' }},
+                {{ name: 'apple-mobile-web-app-title', content: 'SalesDash' }}
             ];
             
-            metaTags.forEach(tag => {
-                if (!parentDoc.querySelector(`meta[name="${tag.name}"]`)) {
+            metaTags.forEach(tag => {{
+                if (!parentDoc.querySelector(`meta[name="${{tag.name}}"]`)) {{
                     const meta = parentDoc.createElement('meta');
                     meta.name = tag.name;
                     meta.content = tag.content;
                     parentDoc.head.appendChild(meta);
-                }
-            });
+                }}
+            }});
 
-            // 3. Inject Apple Touch Icon
-            if (!parentDoc.querySelector('link[rel="apple-touch-icon"]')) {
-                const appleIcon = parentDoc.createElement('link');
-                appleIcon.rel = 'apple-touch-icon';
-                appleIcon.href = 'https://i.imgur.com/dOpt87p.png';
-                parentDoc.head.appendChild(appleIcon);
-            }
-
-            // 4. Register Service Worker (Required by Android/Chrome)
-            if ('serviceWorker' in parentWin.navigator) {
-                const swCode = "self.addEventListener('fetch', function(e) { e.respondWith(fetch(e.request).catch(() => new Response('Offline Mode'))); });";
-                const swBlob = new Blob([swCode], {type: 'application/javascript'});
+            // 5. Register Service Worker (Required by Android/Chrome PC)
+            if ('serviceWorker' in parentWin.navigator) {{
+                const swCode = "self.addEventListener('fetch', function(e) {{ e.respondWith(fetch(e.request).catch(() => new Response('Offline Mode'))); }});";
+                const swBlob = new Blob([swCode], {{type: 'application/javascript'}});
                 const swUrl = URL.createObjectURL(swBlob);
                 parentWin.navigator.serviceWorker.register(swUrl).catch(console.error);
-            }
+            }}
 
-            // 5. Custom Floating Install Button Trigger
-            // This bypasses Chrome's unpredictable heuristics and guarantees an install button shows up
+            // 6. Custom Floating Install Button
             let deferredPrompt;
-            parentWin.addEventListener('beforeinstallprompt', (e) => {
-                // Prevent the mini-infobar from appearing on mobile
+            parentWin.addEventListener('beforeinstallprompt', (e) => {{
                 e.preventDefault();
-                // Stash the event so it can be triggered later
                 deferredPrompt = e;
                 
-                // Create a floating install button if it doesn't exist
-                if (!parentDoc.getElementById('pwa-install-btn')) {
+                if (!parentDoc.getElementById('pwa-install-btn')) {{
                     const btn = parentDoc.createElement('button');
                     btn.id = 'pwa-install-btn';
                     btn.innerHTML = '📲 Install App';
                     btn.style.cssText = 'position: fixed; bottom: 30px; right: 30px; background-color: #FF4B4B; color: white; padding: 12px 24px; border-radius: 50px; border: none; font-size: 16px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer; z-index: 999999; font-family: sans-serif;';
                     
-                    btn.onclick = async () => {
-                        // Hide button, show native prompt
+                    btn.onclick = async () => {{
                         btn.style.display = 'none';
                         deferredPrompt.prompt();
-                        const { outcome } = await deferredPrompt.userChoice;
+                        const {{ outcome }} = await deferredPrompt.userChoice;
                         deferredPrompt = null;
-                    };
+                    }};
                     parentDoc.body.appendChild(btn);
-                }
-            });
+                }}
+            }});
 
-        } catch (err) {
+        }} catch (err) {{
             console.error("PWA setup failed:", err);
-        }
+        }}
     </script>
     """
     components.html(pwa_html, height=0, width=0)
 
-# Initialize the PWA functionality immediately
-setup_pwa()
+# Initialize PWA with the local Icon
+setup_pwa(ICON_DATA)
 
 # =========================
 # LOAD DATA
