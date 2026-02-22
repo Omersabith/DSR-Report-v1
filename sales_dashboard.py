@@ -275,5 +275,3 @@ fast_sku = (
     .head(10)
 )
 st.dataframe(fast_sku, use_container_width=True, hide_index=True)
-
-
