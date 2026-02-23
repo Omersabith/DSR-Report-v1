@@ -206,54 +206,63 @@ if df.empty:
     st.stop()
 
 # =========================
-# GLOBAL FILTERS (Cascading)
+# GLOBAL FILTERS (Cascading - Sidebar)
 # =========================
 st.title("📊 Sales Dashboard")
 
 filtered_df = df.copy()
 
-f_row1 = st.columns(4)
-f_row2 = st.columns(5) 
+# Add a header to the sidebar
+st.sidebar.header("🔍 Filter Data")
 
-# --- Row 1 Filters ---
-start_date = f_row1[0].date_input("Start Date", df["Date"].min())
-end_date = f_row1[1].date_input("End Date", df["Date"].max())
-type_filter = f_row1[2].selectbox("Type", ["BOTH", "SALE", "RETURN"])
-
-filtered_df = filtered_df[(filtered_df["Date"] >= pd.to_datetime(start_date)) & (filtered_df["Date"] <= pd.to_datetime(end_date))]
-if type_filter != "BOTH":
-    filtered_df = filtered_df[filtered_df["Type"] == type_filter]
-
+# 1. Channel
 channel_options = sorted(filtered_df["Channel"].dropna().astype(str).unique())
-channel_filter = f_row1[3].multiselect("Channel", channel_options)
+channel_filter = st.sidebar.multiselect("Channel", channel_options)
 if channel_filter:
     filtered_df = filtered_df[filtered_df["Channel"].isin(channel_filter)]
 
-# --- Row 2 Filters ---
+# 2. Customer Name
 customer_options = sorted(filtered_df["CustomerName"].dropna().astype(str).unique())
-customer_filter = f_row2[0].multiselect("Customer", customer_options)
+customer_filter = st.sidebar.multiselect("Customer Name", customer_options)
 if customer_filter:
     filtered_df = filtered_df[filtered_df["CustomerName"].isin(customer_filter)]
 
+# 3. Category
 cat_options = sorted(filtered_df["Category"].dropna().astype(str).unique())
-cat_filter = f_row2[1].multiselect("Category", cat_options)
+cat_filter = st.sidebar.multiselect("Category", cat_options)
 if cat_filter:
     filtered_df = filtered_df[filtered_df["Category"].isin(cat_filter)]
 
+# 4. Sub Category
 subcat_options = sorted(filtered_df["SubCategory"].dropna().astype(str).unique())
-subcat_filter = f_row2[2].multiselect("Sub Category", subcat_options)
+subcat_filter = st.sidebar.multiselect("Sub Category", subcat_options)
 if subcat_filter:
     filtered_df = filtered_df[filtered_df["SubCategory"].isin(subcat_filter)]
 
+# 5. Part Number
+part_options = sorted(filtered_df["PartNo"].dropna().astype(str).unique())
+part_filter = st.sidebar.multiselect("Part Number", part_options)
+if part_filter:
+    filtered_df = filtered_df[filtered_df["PartNo"].isin(part_filter)]
+
+# 6. Sales Executive
 salesman_options = sorted(filtered_df["Salesman"].dropna().astype(str).unique())
-salesman_filter = f_row2[3].multiselect("Sales Executive", salesman_options)
+salesman_filter = st.sidebar.multiselect("Sales Executive", salesman_options)
 if salesman_filter:
     filtered_df = filtered_df[filtered_df["Salesman"].isin(salesman_filter)]
 
-part_options = sorted(filtered_df["PartNo"].dropna().astype(str).unique())
-part_filter = f_row2[4].multiselect("Part Number", part_options)
-if part_filter:
-    filtered_df = filtered_df[filtered_df["PartNo"].isin(part_filter)]
+# 7. Type
+type_filter = st.sidebar.selectbox("Type", ["BOTH", "SALE", "RETURN"])
+if type_filter != "BOTH":
+    filtered_df = filtered_df[filtered_df["Type"] == type_filter]
+
+# 8. Dates (Placed at the bottom of the sidebar)
+st.sidebar.markdown("---")
+st.sidebar.subheader("📅 Date Range")
+start_date = st.sidebar.date_input("Start Date", df["Date"].min())
+end_date = st.sidebar.date_input("End Date", df["Date"].max())
+
+filtered_df = filtered_df[(filtered_df["Date"] >= pd.to_datetime(start_date)) & (filtered_df["Date"] <= pd.to_datetime(end_date))]
 
 # =========================
 # KPI CALCULATIONS
