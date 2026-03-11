@@ -6,12 +6,11 @@ import base64
 import os
 
 # =========================
-# GET ICON LOCALLY (100% Reliable)
+# GET ICON LOCALLY
 # =========================
 @st.cache_data
 def get_icon_base64():
     """Reads icon.png from the local folder to guarantee it cannot be blocked by the internet."""
-    # 1. Try to read the local icon.png file
     if os.path.exists("icon.png"):
         try:
             with open("icon.png", "rb") as f:
@@ -20,7 +19,6 @@ def get_icon_base64():
         except Exception as e:
             st.error(f"Error reading icon.png: {e}")
             
-    # 2. Absolute fallback if icon.png is missing
     return "https://i.imgur.com/dOpt87p.png"
 
 ICON_DATA = get_icon_base64()
@@ -28,17 +26,11 @@ ICON_DATA = get_icon_base64()
 # Set page configuration
 st.set_page_config(layout="wide", page_title="Sales Dashboard", page_icon="📊")
 
-# Show a warning if the local file is missing to help you troubleshoot
-if not os.path.exists("icon.png"):
-    st.warning("⚠️ 'icon.png' was not found in the app folder. For the custom icon to work reliably, please save your image as 'icon.png' in the same folder as this script.")
-
 # =========================
 # PROGRESSIVE WEB APP (PWA) INJECTION
 # =========================
 def setup_pwa(icon_data):
-    """
-    Injects a Web App Manifest and forces the custom icon using Base64 data.
-    """
+    """Injects a Web App Manifest and forces the custom icon using Base64 data."""
     pwa_html = f"""
     <script>
         try {{
@@ -46,11 +38,9 @@ def setup_pwa(icon_data):
             const parentWin = window.parent;
             const parentLoc = parentWin.location.origin + parentWin.location.pathname; 
 
-            // 1. Force Remove old Streamlit icons to prevent conflicts
             const oldIcons = parentDoc.querySelectorAll('link[rel="shortcut icon"], link[rel="icon"], link[rel="apple-touch-icon"]');
             oldIcons.forEach(icon => icon.remove());
 
-            // 2. Inject Apple Touch Icon & Standard Icon
             const appleIcon = parentDoc.createElement('link');
             appleIcon.rel = 'apple-touch-icon';
             appleIcon.href = '{icon_data}';
@@ -61,32 +51,17 @@ def setup_pwa(icon_data):
             standardIcon.href = '{icon_data}';
             parentDoc.head.appendChild(standardIcon);
 
-            // 3. Inject the Web App Manifest
             const oldManifest = parentDoc.querySelector('link[rel="manifest"]');
             if (oldManifest) oldManifest.remove();
 
             const manifest = {{
                 "name": "Sales Dashboard Application",
                 "short_name": "SalesDash",
-                "description": "Comprehensive Sales Analytics and Tracking",
-                "theme_color": "#F0F2F6",
-                "background_color": "#FFFFFF",
                 "display": "standalone",
-                "orientation": "portrait-primary",
                 "start_url": parentLoc, 
                 "icons": [
-                    {{
-                        "src": "{icon_data}",
-                        "sizes": "192x192",
-                        "type": "image/png",
-                        "purpose": "any maskable"
-                    }},
-                    {{
-                        "src": "{icon_data}",
-                        "sizes": "512x512",
-                        "type": "image/png",
-                        "purpose": "any maskable"
-                    }}
+                    {{ "src": "{icon_data}", "sizes": "192x192", "type": "image/png" }},
+                    {{ "src": "{icon_data}", "sizes": "512x512", "type": "image/png" }}
                 ]
             }};
             
@@ -99,52 +74,6 @@ def setup_pwa(icon_data):
             manifestLink.href = manifestURL;
             parentDoc.head.appendChild(manifestLink);
 
-            // 4. Inject Apple/iOS specific meta tags
-            const metaTags = [
-                {{ name: 'apple-mobile-web-app-capable', content: 'yes' }},
-                {{ name: 'apple-mobile-web-app-status-bar-style', content: 'black-translucent' }},
-                {{ name: 'apple-mobile-web-app-title', content: 'SalesDash' }}
-            ];
-            
-            metaTags.forEach(tag => {{
-                if (!parentDoc.querySelector(`meta[name="${{tag.name}}"]`)) {{
-                    const meta = parentDoc.createElement('meta');
-                    meta.name = tag.name;
-                    meta.content = tag.content;
-                    parentDoc.head.appendChild(meta);
-                }}
-            }});
-
-            // 5. Register Service Worker (Required by Android/Chrome PC)
-            if ('serviceWorker' in parentWin.navigator) {{
-                const swCode = "self.addEventListener('fetch', function(e) {{ e.respondWith(fetch(e.request).catch(() => new Response('Offline Mode'))); }});";
-                const swBlob = new Blob([swCode], {{type: 'application/javascript'}});
-                const swUrl = URL.createObjectURL(swBlob);
-                parentWin.navigator.serviceWorker.register(swUrl).catch(console.error);
-            }}
-
-            // 6. Custom Floating Install Button
-            let deferredPrompt;
-            parentWin.addEventListener('beforeinstallprompt', (e) => {{
-                e.preventDefault();
-                deferredPrompt = e;
-                
-                if (!parentDoc.getElementById('pwa-install-btn')) {{
-                    const btn = parentDoc.createElement('button');
-                    btn.id = 'pwa-install-btn';
-                    btn.innerHTML = '📲 Install App';
-                    btn.style.cssText = 'position: fixed; bottom: 30px; right: 30px; background-color: #FF4B4B; color: white; padding: 12px 24px; border-radius: 50px; border: none; font-size: 16px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); cursor: pointer; z-index: 999999; font-family: sans-serif;';
-                    
-                    btn.onclick = async () => {{
-                        btn.style.display = 'none';
-                        deferredPrompt.prompt();
-                        const {{ outcome }} = await deferredPrompt.userChoice;
-                        deferredPrompt = null;
-                    }};
-                    parentDoc.body.appendChild(btn);
-                }}
-            }});
-
         }} catch (err) {{
             console.error("PWA setup failed:", err);
         }}
@@ -152,7 +81,6 @@ def setup_pwa(icon_data):
     """
     components.html(pwa_html, height=0, width=0)
 
-# Initialize PWA with the local Icon
 setup_pwa(ICON_DATA)
 
 # =========================
@@ -161,13 +89,19 @@ setup_pwa(ICON_DATA)
 @st.cache_data
 def load_data():
     try:
-        try:
+        if os.path.exists("RawData.xlsx"):
             df = pd.read_excel("RawData.xlsx")
-        except FileNotFoundError:
+        elif os.path.exists("RawData.csv"):
             df = pd.read_csv("RawData.csv")
-    except FileNotFoundError:
-        st.error("Data file (RawData.xlsx or RawData.csv) not found. Please place it in the same directory.")
+        else:
+            st.error("Data file (RawData.xlsx or RawData.csv) not found.")
+            return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
         return pd.DataFrame()
+
+    # FIX 1: Remove duplicate rows that may have occurred during repository conflicts
+    df = df.drop_duplicates()
 
     df.columns = df.columns.str.strip()
 
@@ -190,9 +124,11 @@ def load_data():
     df["Value"] = pd.to_numeric(df["Value"], errors="coerce").fillna(0)
     df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
 
+    # Ensure returns are handled as negative values
     df.loc[df["Type"] == "RETURN", "Value"] = -df.loc[df["Type"] == "RETURN", "Value"].abs()
 
-    df["Date"] = pd.to_datetime(df["Date"], dayfirst=True, errors="coerce")
+    # FIX 2: Correct Date Format (M/D/Y)
+    df["Date"] = pd.to_datetime(df["Date"], dayfirst=False, errors="coerce")
     df = df.dropna(subset=["Date"])
 
     df["Month"] = df["Date"].dt.to_period("M").dt.to_timestamp()
@@ -202,67 +138,40 @@ def load_data():
 df = load_data()
 
 if df.empty:
-    st.warning("No valid data to display. Please check your data file format and Date column.")
+    st.warning("No valid data to display. Please check your data file.")
     st.stop()
 
 # =========================
-# GLOBAL FILTERS (Cascading - Sidebar)
+# GLOBAL FILTERS
 # =========================
 st.title("📊 Sales Dashboard")
 
+st.sidebar.header("🔍 Filter Data")
 filtered_df = df.copy()
 
-# Add a header to the sidebar
-st.sidebar.header("🔍 Filter Data")
+def apply_multiselect(label, column):
+    options = sorted(filtered_df[column].dropna().astype(str).unique())
+    selected = st.sidebar.multiselect(label, options)
+    return filtered_df[filtered_df[column].isin(selected)] if selected else filtered_df
 
-# 1. Channel
-channel_options = sorted(filtered_df["Channel"].dropna().astype(str).unique())
-channel_filter = st.sidebar.multiselect("Channel", channel_options)
-if channel_filter:
-    filtered_df = filtered_df[filtered_df["Channel"].isin(channel_filter)]
+filtered_df = apply_multiselect("Channel", "Channel")
+filtered_df = apply_multiselect("Customer Name", "CustomerName")
+filtered_df = apply_multiselect("Category", "Category")
+filtered_df = apply_multiselect("Sub Category", "SubCategory")
+filtered_df = apply_multiselect("Part Number", "PartNo")
+filtered_df = apply_multiselect("Sales Executive", "Salesman")
 
-# 2. Customer Name
-customer_options = sorted(filtered_df["CustomerName"].dropna().astype(str).unique())
-customer_filter = st.sidebar.multiselect("Customer Name", customer_options)
-if customer_filter:
-    filtered_df = filtered_df[filtered_df["CustomerName"].isin(customer_filter)]
-
-# 3. Category
-cat_options = sorted(filtered_df["Category"].dropna().astype(str).unique())
-cat_filter = st.sidebar.multiselect("Category", cat_options)
-if cat_filter:
-    filtered_df = filtered_df[filtered_df["Category"].isin(cat_filter)]
-
-# 4. Sub Category
-subcat_options = sorted(filtered_df["SubCategory"].dropna().astype(str).unique())
-subcat_filter = st.sidebar.multiselect("Sub Category", subcat_options)
-if subcat_filter:
-    filtered_df = filtered_df[filtered_df["SubCategory"].isin(subcat_filter)]
-
-# 5. Part Number
-part_options = sorted(filtered_df["PartNo"].dropna().astype(str).unique())
-part_filter = st.sidebar.multiselect("Part Number", part_options)
-if part_filter:
-    filtered_df = filtered_df[filtered_df["PartNo"].isin(part_filter)]
-
-# 6. Sales Executive
-salesman_options = sorted(filtered_df["Salesman"].dropna().astype(str).unique())
-salesman_filter = st.sidebar.multiselect("Sales Executive", salesman_options)
-if salesman_filter:
-    filtered_df = filtered_df[filtered_df["Salesman"].isin(salesman_filter)]
-
-# 7. Type
 type_filter = st.sidebar.selectbox("Type", ["BOTH", "SALE", "RETURN"])
 if type_filter != "BOTH":
     filtered_df = filtered_df[filtered_df["Type"] == type_filter]
 
-# 8. Dates (Placed at the bottom of the sidebar)
 st.sidebar.markdown("---")
 st.sidebar.subheader("📅 Date Range")
 start_date = st.sidebar.date_input("Start Date", df["Date"].min())
 end_date = st.sidebar.date_input("End Date", df["Date"].max())
 
-filtered_df = filtered_df[(filtered_df["Date"] >= pd.to_datetime(start_date)) & (filtered_df["Date"] <= pd.to_datetime(end_date))]
+filtered_df = filtered_df[(filtered_df["Date"] >= pd.to_datetime(start_date)) & 
+                         (filtered_df["Date"] <= pd.to_datetime(end_date))]
 
 # =========================
 # KPI CALCULATIONS
@@ -280,9 +189,8 @@ st.markdown("""
 div[data-testid="metric-container"] {
     background-color: rgba(28, 131, 225, 0.1);
     border: 1px solid rgba(28, 131, 225, 0.1);
-    padding: 5% 10% 5% 10%;
+    padding: 5% 10%;
     border-radius: 10px;
-    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 </style>
 """, unsafe_allow_html=True)
@@ -294,35 +202,24 @@ k3.metric("Return Value", f"OMR {return_value:,.2f}")
 k4.metric("Sale Volume", f"{sales_volume:,.0f}")
 
 # =========================
-# NEW: MONTHLY PERFORMANCE TREND
+# MONTHLY PERFORMANCE TREND
 # =========================
 st.markdown("---")
 st.subheader("📈 Monthly Performance Trend")
 
 if not filtered_df.empty:
     monthly_trend = filtered_df.groupby(["Month", "Type"])["Value"].sum().reset_index()
-    monthly_trend = monthly_trend.sort_values("Month")
-
     fig_trend = px.bar(
-        monthly_trend, 
-        x="Month", 
-        y="Value", 
-        color="Type",
+        monthly_trend, x="Month", y="Value", color="Type",
         barmode="group",
-        title="Revenue & Returns by Month",
-        labels={"Value": "Amount (OMR)", "Month": "Month of Year"},
+        labels={"Value": "Amount (OMR)"},
         color_discrete_map={"SALE": "#017016", "RETURN": "#99060B"}
     )
-
     fig_trend.update_xaxes(dtick="M1", tickformat="%b %Y")
-    fig_trend.update_layout(hovermode="x unified", plot_bgcolor='rgba(0,0,0,0)')
-
     st.plotly_chart(fig_trend, use_container_width=True)
-else:
-    st.warning("No data found for the current filters.")
 
 # =========================
-# CHARTS ROW (Share)
+# CHARTS ROW
 # =========================
 st.markdown("---")
 c1, c2 = st.columns(2)
@@ -331,18 +228,16 @@ chart_data["AbsValue"] = chart_data["Value"].abs()
 
 if not chart_data.empty:
     fig_cat = px.pie(chart_data, values="AbsValue", names="Category", hole=0.5, title="Revenue Share by Category")
-    fig_cat.update_traces(textposition='inside', textinfo='percent+label')
     c1.plotly_chart(fig_cat, use_container_width=True)
 
     fig_ch = px.pie(chart_data, values="AbsValue", names="Channel", hole=0.5, title="Revenue Share by Channel")
-    fig_ch.update_traces(textposition='inside', textinfo='percent+label')
     c2.plotly_chart(fig_ch, use_container_width=True)
 
 # =========================
-# FAST MOVING SKU
+# TOP SKU TABLE
 # =========================
 st.markdown("---")
-st.subheader("🔥 Top 10 Fast Moving SKU (Based on Selected Filters)")
+st.subheader("🔥 Top 10 Fast Moving SKU")
 fast_sku = (
     filtered_df[filtered_df["Type"] == "SALE"]
     .groupby(["PartNo", "Category", "SubCategory"])["Qty"]
