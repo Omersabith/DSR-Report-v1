@@ -84,24 +84,32 @@ def setup_pwa(icon_data):
 setup_pwa(ICON_DATA)
 
 # =========================
-# LOAD DATA
+# LOAD DATA (Cloud-Safe Version)
 # =========================
 @st.cache_data
 def load_data():
+    # 1. Search for the file ignoring case sensitivity (crucial for Linux/Streamlit Cloud)
+    files_in_dir = os.listdir()
+    target_file = None
+    
+    for f in files_in_dir:
+        if f.lower() in ["rawdata.xlsx", "rawdata.csv"]:
+            target_file = f
+            break
+            
+    if not target_file:
+        st.error(f"❌ Could not find raw data! Here are the files I see in your directory: {files_in_dir}")
+        return pd.DataFrame()
+
+    # 2. Load the file
     try:
-        if os.path.exists("RawData.xlsx"):
-            df = pd.read_excel("RawData.xlsx")
-        elif os.path.exists("RawData.csv"):
-            df = pd.read_csv("RawData.csv")
+        if target_file.endswith(".xlsx"):
+            df = pd.read_excel(target_file)
         else:
-            st.error("Data file (RawData.xlsx or RawData.csv) not found.")
-            return pd.DataFrame()
+            df = pd.read_csv(target_file)
     except Exception as e:
         st.error(f"Error loading file: {e}")
         return pd.DataFrame()
-
-    # FIX 1: Remove duplicate rows that may have occurred during repository conflicts
-    df = df.drop_duplicates()
 
     df.columns = df.columns.str.strip()
 
@@ -121,16 +129,25 @@ def load_data():
             df[col] = "Unknown" if col not in ["Value", "Qty"] else 0
 
     df["Type"] = df["Type"].astype(str).str.upper().str.strip()
+    
+    # 3. Strip Commas to prevent Pandas from turning thousands into zeros
+    df["Value"] = df["Value"].astype(str).str.replace(',', '', regex=False)
+    df["Qty"] = df["Qty"].astype(str).str.replace(',', '', regex=False)
+
     df["Value"] = pd.to_numeric(df["Value"], errors="coerce").fillna(0)
     df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
 
-    # Ensure returns are handled as negative values
+    # 4. Ensure returns are handled as negative values
     df.loc[df["Type"] == "RETURN", "Value"] = -df.loc[df["Type"] == "RETURN", "Value"].abs()
 
-    # FIX 2: Correct Date Format (M/D/Y)
+    # 5. Correct Date Format
     df["Date"] = pd.to_datetime(df["Date"], dayfirst=False, errors="coerce")
+    
+    # Safety check for broken dates
+    if df["Date"].isna().all():
+        st.error("❌ All dates failed to process. Please check the date format in your CSV.")
+        
     df = df.dropna(subset=["Date"])
-
     df["Month"] = df["Date"].dt.to_period("M").dt.to_timestamp()
 
     return df
@@ -138,40 +155,53 @@ def load_data():
 df = load_data()
 
 if df.empty:
-    st.warning("No valid data to display. Please check your data file.")
-    st.stop()
+    st.stop() # Stops execution gracefully if data fails to load
 
 # =========================
-# GLOBAL FILTERS
+# GLOBAL FILTERS (SIDEBAR)
 # =========================
 st.title("📊 Sales Dashboard")
 
 st.sidebar.header("🔍 Filter Data")
 filtered_df = df.copy()
 
-def apply_multiselect(label, column):
-    options = sorted(filtered_df[column].dropna().astype(str).unique())
+# Helper function for cascading filters
+def apply_multiselect(current_df, label, column):
+    options = sorted(current_df[column].dropna().astype(str).unique())
     selected = st.sidebar.multiselect(label, options)
-    return filtered_df[filtered_df[column].isin(selected)] if selected else filtered_df
+    if selected:
+        return current_df[current_df[column].isin(selected)]
+    return current_df
 
-filtered_df = apply_multiselect("Channel", "Channel")
-filtered_df = apply_multiselect("Customer Name", "CustomerName")
-filtered_df = apply_multiselect("Category", "Category")
-filtered_df = apply_multiselect("Sub Category", "SubCategory")
-filtered_df = apply_multiselect("Part Number", "PartNo")
-filtered_df = apply_multiselect("Sales Executive", "Salesman")
+# Apply cascading filters in order
+filtered_df = apply_multiselect(filtered_df, "Channel", "Channel")
+filtered_df = apply_multiselect(filtered_df, "Customer Name", "CustomerName")
+filtered_df = apply_multiselect(filtered_df, "Category", "Category")
+filtered_df = apply_multiselect(filtered_df, "Sub Category", "SubCategory")
+filtered_df = apply_multiselect(filtered_df, "Part Number", "PartNo")
+filtered_df = apply_multiselect(filtered_df, "Sales Executive", "Salesman")
 
+# Type Filter
 type_filter = st.sidebar.selectbox("Type", ["BOTH", "SALE", "RETURN"])
 if type_filter != "BOTH":
     filtered_df = filtered_df[filtered_df["Type"] == type_filter]
 
+# Dates placed safely at the bottom
 st.sidebar.markdown("---")
 st.sidebar.subheader("📅 Date Range")
-start_date = st.sidebar.date_input("Start Date", df["Date"].min())
-end_date = st.sidebar.date_input("End Date", df["Date"].max())
 
-filtered_df = filtered_df[(filtered_df["Date"] >= pd.to_datetime(start_date)) & 
-                         (filtered_df["Date"] <= pd.to_datetime(end_date))]
+# Extract safe min/max dates for the widgets
+min_date = df["Date"].min().date()
+max_date = df["Date"].max().date()
+
+start_date = st.sidebar.date_input("Start Date", min_date)
+end_date = st.sidebar.date_input("End Date", max_date)
+
+# Fix Midnight Cutoff using .dt.date
+filtered_df = filtered_df[
+    (filtered_df["Date"].dt.date >= start_date) & 
+    (filtered_df["Date"].dt.date <= end_date)
+]
 
 # =========================
 # KPI CALCULATIONS
@@ -184,12 +214,13 @@ sales_value = sales_df["Value"].sum()
 return_value = return_df["Value"].sum()
 sales_volume = sales_df["Qty"].sum()
 
+# CSS with fixed pixels for uniform PC/Mobile appearance
 st.markdown("""
 <style>
 div[data-testid="metric-container"] {
     background-color: rgba(28, 131, 225, 0.1);
     border: 1px solid rgba(28, 131, 225, 0.1);
-    padding: 5% 10%;
+    padding: 15px 20px;
     border-radius: 10px;
 }
 </style>
