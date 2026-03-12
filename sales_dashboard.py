@@ -88,7 +88,6 @@ setup_pwa(ICON_DATA)
 # =========================
 @st.cache_data
 def load_data():
-    # 1. Search for the file ignoring case sensitivity (crucial for Linux/Streamlit Cloud)
     files_in_dir = os.listdir()
     target_file = None
     
@@ -101,7 +100,6 @@ def load_data():
         st.error(f"❌ Could not find raw data! Here are the files I see in your directory: {files_in_dir}")
         return pd.DataFrame()
 
-    # 2. Load the file
     try:
         if target_file.endswith(".xlsx"):
             df = pd.read_excel(target_file)
@@ -130,21 +128,17 @@ def load_data():
 
     df["Type"] = df["Type"].astype(str).str.upper().str.strip()
     
-    # 3. Strip Commas to prevent Pandas from turning thousands into zeros
     df["Value"] = df["Value"].astype(str).str.replace(',', '', regex=False)
     df["Qty"] = df["Qty"].astype(str).str.replace(',', '', regex=False)
 
     df["Value"] = pd.to_numeric(df["Value"], errors="coerce").fillna(0)
     df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce").fillna(0)
 
-    # 4. Ensure returns are handled as negative values
     df.loc[df["Type"] == "RETURN", "Value"] = -df.loc[df["Type"] == "RETURN", "Value"].abs()
 
-    # 5. Correct Date Format
     df["Date"] = pd.to_datetime(df["Date"], dayfirst=False, errors="coerce")
     
-    # Safety check for broken dates
-    if df["Date"].isna().all():
+    if df["Date"].isna().all() and not df.empty:
         st.error("❌ All dates failed to process. Please check the date format in your CSV.")
         
     df = df.dropna(subset=["Date"])
@@ -155,49 +149,44 @@ def load_data():
 df = load_data()
 
 if df.empty:
-    st.stop() # Stops execution gracefully if data fails to load
+    st.stop()
 
 # =========================
 # GLOBAL FILTERS (SIDEBAR)
 # =========================
 st.title("📊 Sales Dashboard")
-
 st.sidebar.header("🔍 Filter Data")
 filtered_df = df.copy()
 
-# Helper function for cascading filters
+# Updated Helper Function: Now returns the selected items too!
 def apply_multiselect(current_df, label, column):
     options = sorted(current_df[column].dropna().astype(str).unique())
     selected = st.sidebar.multiselect(label, options)
     if selected:
-        return current_df[current_df[column].isin(selected)]
-    return current_df
+        return current_df[current_df[column].isin(selected)], selected
+    return current_df, selected # Returns empty list if nothing selected
 
-# Apply cascading filters in order
-filtered_df = apply_multiselect(filtered_df, "Channel", "Channel")
-filtered_df = apply_multiselect(filtered_df, "Customer Name", "CustomerName")
-filtered_df = apply_multiselect(filtered_df, "Category", "Category")
-filtered_df = apply_multiselect(filtered_df, "Sub Category", "SubCategory")
-filtered_df = apply_multiselect(filtered_df, "Part Number", "PartNo")
-filtered_df = apply_multiselect(filtered_df, "Sales Executive", "Salesman")
+# Apply filters and capture the user's selections
+filtered_df, channel_filter = apply_multiselect(filtered_df, "Channel", "Channel")
+filtered_df, cust_filter = apply_multiselect(filtered_df, "Customer Name", "CustomerName")
+filtered_df, cat_filter = apply_multiselect(filtered_df, "Category", "Category")
+filtered_df, subcat_filter = apply_multiselect(filtered_df, "Sub Category", "SubCategory")
+filtered_df, part_filter = apply_multiselect(filtered_df, "Part Number", "PartNo")
+filtered_df, salesman_filter = apply_multiselect(filtered_df, "Sales Executive", "Salesman")
 
 # Type Filter
 type_filter = st.sidebar.selectbox("Type", ["BOTH", "SALE", "RETURN"])
 if type_filter != "BOTH":
     filtered_df = filtered_df[filtered_df["Type"] == type_filter]
 
-# Dates placed safely at the bottom
+# Date Range
 st.sidebar.markdown("---")
 st.sidebar.subheader("📅 Date Range")
-
-# Extract safe min/max dates for the widgets
 min_date = df["Date"].min().date()
 max_date = df["Date"].max().date()
-
 start_date = st.sidebar.date_input("Start Date", min_date)
 end_date = st.sidebar.date_input("End Date", max_date)
 
-# Fix Midnight Cutoff using .dt.date
 filtered_df = filtered_df[
     (filtered_df["Date"].dt.date >= start_date) & 
     (filtered_df["Date"].dt.date <= end_date)
@@ -214,7 +203,6 @@ sales_value = sales_df["Value"].sum()
 return_value = return_df["Value"].sum()
 sales_volume = sales_df["Qty"].sum()
 
-# CSS with fixed pixels for uniform PC/Mobile appearance
 st.markdown("""
 <style>
 div[data-testid="metric-container"] {
@@ -250,7 +238,7 @@ if not filtered_df.empty:
     st.plotly_chart(fig_trend, use_container_width=True)
 
 # =========================
-# CHARTS ROW
+# CHARTS ROW (Dynamic Drill-Downs)
 # =========================
 st.markdown("---")
 c1, c2 = st.columns(2)
@@ -258,10 +246,27 @@ chart_data = filtered_df.copy()
 chart_data["AbsValue"] = chart_data["Value"].abs()
 
 if not chart_data.empty:
-    fig_cat = px.pie(chart_data, values="AbsValue", names="Category", hole=0.5, title="Revenue Share by Category")
+    
+    # 1. Dynamic Category Chart Logic
+    if len(cat_filter) > 0:
+        cat_dimension = "SubCategory"
+        cat_title = "Revenue Share by Sub Category"
+    else:
+        cat_dimension = "Category"
+        cat_title = "Revenue Share by Category"
+
+    fig_cat = px.pie(chart_data, values="AbsValue", names=cat_dimension, hole=0.5, title=cat_title)
     c1.plotly_chart(fig_cat, use_container_width=True)
 
-    fig_ch = px.pie(chart_data, values="AbsValue", names="Channel", hole=0.5, title="Revenue Share by Channel")
+    # 2. Dynamic Channel Chart Logic
+    if len(channel_filter) > 0:
+        ch_dimension = "CustomerName"
+        ch_title = "Revenue Share by Customer"
+    else:
+        ch_dimension = "Channel"
+        ch_title = "Revenue Share by Channel"
+
+    fig_ch = px.pie(chart_data, values="AbsValue", names=ch_dimension, hole=0.5, title=ch_title)
     c2.plotly_chart(fig_ch, use_container_width=True)
 
 # =========================
